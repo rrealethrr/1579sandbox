@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>1579 Circuit Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+</head>
+<body>
+<div id="app">
+  <svg id="board" aria-label="Circuit drawing board" role="application">
+    <defs>
+      <pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse">
+        <circle cx="0" cy="0" r="1.4" class="grid-dot"></circle>
+        <circle cx="40" cy="0" r="1.4" class="grid-dot"></circle>
+        <circle cx="0" cy="40" r="1.4" class="grid-dot"></circle>
+        <circle cx="40" cy="40" r="1.4" class="grid-dot"></circle>
+      </pattern>
+      <filter id="glow" filterUnits="userSpaceOnUse" x="-20000" y="-20000" width="40000" height="40000">
+        <feGaussianBlur stdDeviation="3.2" result="b"></feGaussianBlur>
+        <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+      </filter>
+    </defs>
+    <rect id="grid" width="100%" height="100%" fill="url(#dots)"></rect>
+    <g id="world">
+      <g id="layer-issues"></g>
+      <g id="layer-parts"></g>
+      <g id="layer-flow"></g>
+      <g id="layer-labels"></g>
+      <g id="layer-overlay"></g>
+    </g>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 16h6l3-7 4 14 4-14 3 7h6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span><b class="brand-num">1579</b> Circuit Sandbox</span>
+    </div>
+    <nav class="examples" aria-label="Example circuits">
+      <span class="eyebrow">Examples</span>
+      <div id="example-buttons" class="chip-row"></div>
+      <button id="btn-clear" class="chip ghost" type="button">Clear</button>
+    </nav>
+    <div class="top-actions">
+      <button id="btn-milli" class="chip toggle" type="button" aria-pressed="false" title="Show current in mA and power in mW">mA · mW</button>
+      <button id="btn-flow" class="chip toggle on" type="button" aria-pressed="true" title="Show current flowing along the wires"><span class="flow-long">Current flow</span><span class="flow-short">Flow</span></button>
+      <button id="btn-fit" class="chip ghost" type="button" title="Fit drawing to screen (0)">Fit</button>
+    </div>
+  </header>
+
+  <div class="toolbar" role="toolbar" aria-label="Drawing tools">
+    <div id="tools" class="tool-group"></div>
+    <div class="tool-sep"></div>
+    <div class="tool-group">
+      <button id="btn-undo" class="tool" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">
+        <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+      </button>
+      <button id="btn-redo" class="tool" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+        <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>
+      </button>
+    </div>
+  </div>
+  <div id="hint" class="hint"></div>
+
+  <aside id="results" class="results" aria-label="Results"></aside>
+  <div class="credit">made with <span class="heart" aria-label="love">♥</span> by Dru</div>
+  <div id="editor" class="editor" hidden></div>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
