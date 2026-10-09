@@ -251,8 +251,7 @@ details.steps li { overflow-wrap: anywhere; }
 .run-label.warn text { fill: var(--warn); }
 .run-label.fail text { fill: var(--bad); }
 .hover-edge.run-sel { opacity: 0.32; stroke-width: 12; }
-.len-tag rect { fill: var(--panel-solid); stroke: var(--calc); stroke-width: 1.5; }
-.len-tag text { font: 600 13px var(--font-mono); fill: var(--calc); }
+.len-tag { font: 600 14px var(--font-mono); fill: var(--fg); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
 
 .wires { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
 .wires-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

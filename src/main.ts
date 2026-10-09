@@ -745,8 +745,7 @@ function renderOverlay() {
     // Live length while painting a wire.
     const p = drag.last;
     const text = `${num(drag.steps * wireSettings.ftPerSquare)} ft`;
-    const w = text.length * 8.4 + 16;
-    out.push(`<g class="len-tag" transform="translate(${p.x * G + 14} ${p.y * G - 34})"><rect width="${w}" height="24" rx="7"/><text x="${w / 2}" y="16.5" text-anchor="middle">${text}</text></g>`);
+    out.push(`<text class="len-tag" x="${p.x * G + 14}" y="${p.y * G - 14}">${text}</text>`);
   }
   layers.overlay.innerHTML = out.join("");
 }
