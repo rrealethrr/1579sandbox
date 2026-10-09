@@ -3,6 +3,9 @@ import { EXAMPLES } from "./examples";
 import { edgeEnds, edgeKey, isVertical, nextName, type Doc, type Item, type Pt, type Q } from "./model";
 import { analyze, SHAPE_LABEL, toNetlist, type Analysis, type Numbers } from "./solver/circuit";
 import { formatQty, parseValue } from "./solver/units";
+import { WIRE_SIZES } from "./solver/conductor";
+import { analyzeWires, DEFAULT_WIRE_SETTINGS, METAL_NAME, type Run, type WireAnalysis, type WireSettings } from "./solver/wires";
+import type { Check, Metal, Verdict } from "./solver/nec";
 
 const G = 40; // pixels per grid step
 const STORE_KEY = "dc-sandbox-doc-v1";
@@ -36,6 +39,21 @@ function show(v: number, unit: string): string {
   if (milli && (unit === "A" || unit === "W")) return formatQty(v * 1000, "m" + unit, 4);
   return formatQty(v, unit, 4);
 }
+const WIRE_KEY = "dc-sandbox-wires-v1";
+/** Real-wire mode: off by default, so wires are perfect and nothing about them shows. */
+let wireSettings: WireSettings = (() => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WIRE_KEY) ?? "null");
+    if (raw && typeof raw === "object") return { ...DEFAULT_WIRE_SETTINGS, ...raw, k: { ...DEFAULT_WIRE_SETTINGS.k, ...raw.k } };
+  } catch { /* storage unavailable */ }
+  return { ...DEFAULT_WIRE_SETTINGS };
+})();
+let wires: WireAnalysis | null = null;
+function saveWireSettings() {
+  try { localStorage.setItem(WIRE_KEY, JSON.stringify(wireSettings)); } catch { /* storage unavailable */ }
+}
+const num = (x: number) => String(Number(x.toPrecision(4)));
+const VERDICT_LABEL: Record<Verdict, string> = { pass: "Passes", warn: "Warnings", fail: "Fails" };
 let view = { tx: 0, ty: 0, k: 1 };
 let analysis: Analysis = analyze({}, {});
 let inputErrors: Record<string, Partial<Record<Q, string>>> = {};
@@ -131,6 +149,7 @@ function knownNumbers(): Record<string, Numbers> {
 
 function changed(persist = true) {
   analysis = analyze(doc, knownNumbers());
+  wires = wireSettings.on ? analyzeWires(doc, analysis, wireSettings) : null;
   if (persist) saveDoc();
   renderBoard();
   renderResults();
@@ -229,6 +248,18 @@ function renderBoard() {
       issues.push(`<line class="issue-mark ${iss.level}" x1="${a.x * G}" y1="${a.y * G}" x2="${b.x * G}" y2="${b.y * G}"/>`);
     }
   }
+  if (wires) {
+    for (const run of wires.runs) {
+      const carrying = run.I > 0;
+      if (carrying && run.verdict !== "pass") {
+        for (const e of run.edges) {
+          const [a, b] = edgeEnds(e);
+          issues.push(`<line class="issue-mark ${run.verdict === "fail" ? "error" : "warning"}" x1="${a.x * G}" y1="${a.y * G}" x2="${b.x * G}" y2="${b.y * G}"/>`);
+        }
+      }
+      labels.push(runLabelSvg(run));
+    }
+  }
   if (analysis.solved) {
     let max = 0;
     for (const c of analysis.edgeCurrent.values()) max = Math.max(max, Math.abs(c));
@@ -246,6 +277,70 @@ function renderBoard() {
   layers.issues.innerHTML = issues.join("");
   board.classList.toggle("flow-off", !showFlow);
   renderOverlay();
+}
+
+/** Length and size tag beside the middle of a wire run. */
+function runLabelSvg(run: Run): string {
+  const key = run.edges[Math.floor(run.edges.length / 2)];
+  const [a, b] = edgeEnds(key);
+  const mx = ((a.x + b.x) / 2) * G, my = ((a.y + b.y) / 2) * G;
+  const vert = isVertical(key);
+  const state = run.I > 0 ? run.verdict : "idle";
+  const len = `${num(run.lengthFt)} ft`;
+  const text = isPhone() && key !== selected ? len : `${len} · ${run.size}`;
+  // Vertical runs read along the wire, on its left, so they stay clear of part labels.
+  const pos = vert ? `transform="translate(${mx - 9} ${my}) rotate(-90)"` : `x="${mx}" y="${my + 20}"`;
+  return `<g class="label run-label ${state}" data-edge="${key}"><text ${pos} text-anchor="middle">${esc(text)}</text></g>`;
+}
+
+function verdictBadge(v: Verdict, label = VERDICT_LABEL[v]) {
+  return `<span class="badge ${v === "pass" ? "ok" : v === "warn" ? "partial" : "bad"}">${label}</span>`;
+}
+function checkItem(c: Check, who = "") {
+  return `<li class="${c.verdict === "pass" ? "pass" : c.verdict === "warn" ? "warning" : "error"}"><span><b>${esc(who)}${esc(c.title)}</b> <span class="rule">NEC ${esc(c.rule)}</span><br>${esc(c.detail)}</span></li>`;
+}
+
+function sizeOptions(current: string, defaultLabel: string) {
+  return `<option value=""${current === "" ? " selected" : ""}>${esc(defaultLabel)}</option>` +
+    `<option value="auto"${current === "auto" ? " selected" : ""}>Auto (smallest that passes)</option>` +
+    WIRE_SIZES.map((w) => `<option value="${w.name}"${current === w.name ? " selected" : ""}>${w.name}</option>`).join("");
+}
+
+function wiresSection(): string {
+  const w = wires;
+  if (!w) return "";
+  const s = wireSettings;
+  const settings = `
+    <div class="wire-settings">
+      <label class="wset"><span>Scale</span><span class="wbox"><input id="ws-scale" type="number" min="0.1" step="any" inputmode="decimal" value="${s.ftPerSquare}"><em>ft per square</em></span></label>
+      <label class="wset"><span>Material</span><span class="wbox"><select id="ws-metal">${(["cu", "al"] as Metal[]).map((m) => `<option value="${m}"${m === s.metal ? " selected" : ""}>${METAL_NAME[m]} (K = ${s.k[m]})</option>`).join("")}</select></span></label>
+      <label class="wset"><span>Wire size</span><span class="wbox"><select id="ws-size">${sizeOptions(s.size, "Auto (smallest that passes)").replace(/<option value=""[^>]*>[^<]*<\/option>/, "")}</select></span></label>
+    </div>`;
+  const solved = w.loads.length > 0;
+  if (!solved) {
+    return `<section class="wires"><div class="wires-head"><h3>Real wires</h3>${verdictBadge("pass", "Waiting")}</div>${settings}
+      <p class="wire-note">${w.problem ? esc(w.problem) : "Wire lengths show on the board. Voltage drop and the NEC check appear once the circuit is solved."}</p></section>`;
+  }
+  const loadRows = w.loads.map((l) => `<tr class="row" data-edge="${l.edge}"><td><span class="pname R">${esc(l.name)}</span></td><td>${esc(show(l.vIdeal, "V"))}</td><td class="calc">${esc(show(l.v, "V"))}</td><td class="vd ${l.check.verdict}">${num(l.dropPercent)}%</td></tr>`).join("");
+  const runRows = w.runs.map((r) => `<tr class="row wrow${selected && r.edges.includes(selected) ? " selected" : ""}" data-edge="${r.edges[0]}"><td><span class="dot ${r.I > 0 ? r.verdict : "idle"}"></span>${r.name}</td><td>${num(r.lengthFt)} ft</td><td>${r.size}${r.auto ? '<span class="auto">auto</span>' : ""}</td><td>${esc(show(r.R, "Ω"))}</td><td>${esc(show(r.I, "A"))}</td><td>${esc(show(r.vd, "V"))}</td></tr>`).join("");
+  const problems = [
+    ...w.loads.filter((l) => l.check.verdict !== "pass").map((l) => checkItem(l.check, `${l.name}: `)),
+    ...w.runs.filter((r) => r.I > 0).flatMap((r) => r.checks.filter((c) => c.verdict !== "pass").map((c) => checkItem(c, `${r.name}: `))),
+  ];
+  return `<section class="wires">
+    <div class="wires-head"><h3>Real wires</h3>${verdictBadge(w.verdict, `NEC: ${VERDICT_LABEL[w.verdict].toLowerCase()}`)}</div>
+    ${settings}
+    <div class="totals">
+      <div class="total"><div class="k">Worst drop</div><div class="v vd ${w.verdict === "pass" ? "pass" : w.loads.some((l) => l.check.verdict === "fail") ? "fail" : w.loads.some((l) => l.check.verdict === "warn") ? "warn" : "pass"}">${num(w.worstDrop)}%</div></div>
+      <div class="total"><div class="k">Lost in wire</div><div class="v">${esc(show(w.totalLoss, "W"))}</div></div>
+    </div>
+    <ul class="issues checks">${problems.length ? problems.join("") : `<li class="pass"><span><b>All runs pass</b><br>Drop within 3% (210.19(A) / 215.2(A) informational notes), ampacity (310.16, 75 °C), small-conductor limits (240.4(D)) and minimum size (310.3(A)).</span></li>`}</ul>
+    <div><div class="section-title">At the loads</div><div class="table-wrap"><table>
+      <thead><tr><th>Load</th><th>Perfect wire</th><th>Real wire</th><th>Drop</th></tr></thead><tbody>${loadRows}</tbody></table></div></div>
+    <div><div class="section-title">Wire runs</div><div class="table-wrap"><table>
+      <thead><tr><th>Run</th><th>Length</th><th>Size</th><th>R</th><th>I</th><th>VD</th></tr></thead><tbody>${runRows}</tbody></table></div></div>
+    <p class="wire-note">Click a run on the board to change its length, size or material. Loads keep the resistance from the perfect-wire solve.</p>
+  </section>`;
 }
 
 function renderResults() {
@@ -289,6 +384,7 @@ function renderResults() {
     </section>
     ${tot ? `<section class="totals">${tile("R eq", tot.R, "Ω")}${tile("Source", tot.V, "V")}${tile("Total I", tot.I, "A")}${tile("Total P", tot.P, "W")}</section>` : ""}
     ${issues.length ? `<ul class="issues">${issues.map((i) => `<li class="${i.level}">${esc(i.message)}</li>`).join("")}</ul>` : ""}
+    ${wiresSection()}
     ${rows ? `<section><div class="table-wrap"><table>
       <thead><tr><th>Part</th><th>R</th><th>V</th><th>I</th><th>P</th></tr></thead><tbody>${rows}</tbody></table></div></section>
       <div class="legend"><span><b>White</b> you typed</span><span><b class="calc">Cyan</b> calculated</span></div>` : ""}
@@ -302,6 +398,8 @@ let editorSnap: string | null = null;
 
 function renderEditor() {
   const item = selected ? doc[selected] : null;
+  const run = item?.kind === "wire" ? wires?.runOfEdge.get(selected!) : undefined;
+  if (run) { renderWireEditor(run); return; }
   if (!item || item.kind === "wire") {
     // Forget which part the editor showed, so reopening the same part rebuilds it.
     editorEl.hidden = true; editorEl.innerHTML = ""; delete editorEl.dataset.edge; delete editorEl.dataset.kind;
@@ -356,6 +454,57 @@ function renderEditor() {
   positionEditor();
 }
 
+function renderWireEditor(run: Run) {
+  const key = run.edges.join(" ");
+  const focusedId = document.activeElement?.id;
+  if (editorEl.dataset.edge !== key || editorEl.dataset.kind !== "wire") {
+    editorEl.dataset.edge = key;
+    editorEl.dataset.kind = "wire";
+    editorEl.className = "editor wire";
+    editorEl.innerHTML = `
+      <header><span class="kind-dot"></span><span class="run-name"></span>
+        <button class="close" type="button" id="ed-close" aria-label="Close">×</button></header>
+      <label class="wset"><span>Length</span><span class="wbox"><input id="wd-len" inputmode="decimal" autocomplete="off"><em>ft</em></span></label>
+      <label class="wset"><span>Size</span><span class="wbox"><select id="wd-size"></select></span></label>
+      <label class="wset"><span>Material</span><span class="wbox"><select id="wd-metal"></select></span></label>
+      <div class="wire-read"></div>
+      <ul class="issues checks"></ul>
+      <div class="actions"><button class="chip" type="button" id="wd-reset">Use defaults</button></div>`;
+  }
+  editorEl.hidden = false;
+  document.body.classList.add("editing");
+  (editorEl.querySelector(".run-name") as HTMLElement).textContent = `${run.name} · wire run`;
+  const len = editorEl.querySelector("#wd-len") as HTMLInputElement;
+  if (document.activeElement !== len) len.value = run.spec.lengthFt !== undefined ? String(run.spec.lengthFt) : "";
+  len.placeholder = `${num(run.drawnFt)} (as drawn)`;
+  const defSize = wireSettings.size === "auto" ? "Default: auto" : `Default: ${wireSettings.size}`;
+  (editorEl.querySelector("#wd-size") as HTMLSelectElement).innerHTML = sizeOptions(run.spec.size ?? "", defSize);
+  (editorEl.querySelector("#wd-metal") as HTMLSelectElement).innerHTML =
+    `<option value="">Default: ${METAL_NAME[wireSettings.metal].toLowerCase()}</option>` +
+    (["cu", "al"] as Metal[]).map((m) => `<option value="${m}"${run.spec.metal === m ? " selected" : ""}>${METAL_NAME[m]} (K = ${wireSettings.k[m]})</option>`).join("");
+  const solved = run.I > 0 || (wires?.loads.length ?? 0) > 0;
+  (editorEl.querySelector(".wire-read") as HTMLElement).innerHTML = `
+    <div><span>Size</span><b>${run.size}${run.auto ? " (auto)" : ""}</b></div>
+    <div><span>Area</span><b>${run.cmil.toLocaleString("en-US")} cmil</b></div>
+    <div><span>R = K·L/CM</span><b>${esc(show(run.R, "Ω"))}</b></div>
+    ${solved ? `<div><span>Current</span><b>${esc(show(run.I, "A"))}</b></div><div><span>Drop on run</span><b>${esc(show(run.vd, "V"))} (${num(run.vdPercent)}%)</b></div><div><span>Lost</span><b>${esc(show(run.loss, "W"))}</b></div>` : ""}`;
+  (editorEl.querySelector(".checks") as HTMLElement).innerHTML = solved && run.I > 0 ? run.checks.map((c) => checkItem(c)).join("") : "";
+  if (focusedId && document.activeElement?.id !== focusedId) document.getElementById(focusedId)?.focus();
+  positionEditor();
+}
+
+/** Apply a change to every edge of the selected wire run. */
+function patchRun(patch: Partial<Record<"lengthFt" | "size" | "metal", string | number | undefined>>) {
+  const run = selected ? wires?.runOfEdge.get(selected) : undefined;
+  if (!run) return;
+  for (const e of run.edges) {
+    const w = { ...doc[e].wire, ...patch } as Record<string, unknown>;
+    for (const k of Object.keys(w)) if (w[k] === undefined || w[k] === "") delete w[k];
+    if (Object.keys(w).length) doc[e].wire = w; else delete doc[e].wire;
+  }
+  changed();
+}
+
 function positionEditor() {
   if (editorEl.hidden || !selected || !doc[selected]) return;
   if (window.matchMedia("(max-width: 860px)").matches) { editorEl.style.left = ""; editorEl.style.top = ""; return; }
@@ -385,6 +534,15 @@ editorEl.addEventListener("input", (e) => {
   const t = e.target as HTMLInputElement;
   if (!selected || !doc[selected]) return;
   const item = doc[selected];
+  if (t.id === "wd-len") {
+    const v = Number(t.value.trim());
+    const ok = t.value.trim() === "" || (isFinite(v) && v > 0);
+    t.classList.toggle("bad", !ok);
+    if (ok) patchRun({ lengthFt: t.value.trim() === "" ? undefined : v });
+    return;
+  }
+  if (t.id === "wd-size") { patchRun({ size: t.value || undefined }); return; }
+  if (t.id === "wd-metal") { patchRun({ metal: t.value || undefined }); return; }
   if (t.id === "ed-name") {
     const name = t.value.trim().replace(/\s+/g, "");
     const clash = Object.values(doc).some((i) => i !== item && i.name === name);
@@ -414,9 +572,22 @@ editorEl.addEventListener("click", (e) => {
   if (id === "ed-close") { commitEditor(); select(null); }
   if (id === "ed-del") deleteSelected();
   if (id === "ed-flip") flipSelected();
+  if (id === "wd-reset") { pushHistory(); patchRun({ lengthFt: undefined, size: undefined, metal: undefined }); }
 });
 
 // ---------------------------------------------------------------- results interactions
+resultsEl.addEventListener("change", (e) => {
+  const t = e.target as HTMLInputElement;
+  if (t.id === "ws-scale") {
+    const v = Number(t.value);
+    if (!(isFinite(v) && v > 0)) { t.value = String(wireSettings.ftPerSquare); return; }
+    wireSettings.ftPerSquare = v;
+  } else if (t.id === "ws-metal") wireSettings.metal = t.value as Metal;
+  else if (t.id === "ws-size") wireSettings.size = t.value;
+  else return;
+  saveWireSettings();
+  changed(false);
+});
 resultsEl.addEventListener("click", async (e) => {
   const t = e.target as HTMLElement;
   if (t.id === "btn-netlist") {
@@ -539,7 +710,7 @@ function fitView() {
 // ---------------------------------------------------------------- pointer input
 let drag:
   | { mode: "pan"; sx: number; sy: number; tx: number; ty: number }
-  | { mode: "wire"; last: Pt; snap: string; changed: boolean }
+  | { mode: "wire"; last: Pt; snap: string; changed: boolean; steps: number }
   | { mode: "erase"; snap: string; changed: boolean }
   | { mode: "move"; key: string; snap: string; moved: boolean }
   | null = null;
@@ -563,9 +734,18 @@ function renderOverlay() {
       out.push(edgeLine(hover.edge, "hover-edge"));
     }
   }
-  if (selected && doc[selected]) {
+  const selRun = selected && wires ? wires.runOfEdge.get(selected) : undefined;
+  if (selRun) {
+    for (const e of selRun.edges) out.push(edgeLine(e, "hover-edge run-sel"));
+  } else if (selected && doc[selected] && doc[selected].kind !== "wire") {
     const [a, b] = edgeEnds(selected);
     out.push(`<circle class="sel-ring" cx="${((a.x + b.x) / 2) * G}" cy="${((a.y + b.y) / 2) * G}" r="${G * 0.62}"/>`);
+  }
+  if (wires && drag?.mode === "wire" && drag.steps > 0) {
+    // Live length while painting a wire.
+    const p = drag.last;
+    const text = `${num(drag.steps * wireSettings.ftPerSquare)} ft`;
+    out.push(`<text class="len-tag" x="${p.x * G + 14}" y="${p.y * G - 14}">${text}</text>`);
   }
   layers.overlay.innerHTML = out.join("");
 }
@@ -644,7 +824,7 @@ board.addEventListener("pointerdown", (e) => {
     }
   }
   if (tool === "wire") {
-    drag = { mode: "wire", last: pt, snap: snapshot(), changed: false };
+    drag = { mode: "wire", last: pt, snap: snapshot(), changed: false, steps: 0 };
   } else if (tool === "R" || tool === "V") {
     placePart(edge, tool);
   } else if (tool === "erase") {
@@ -708,6 +888,7 @@ board.addEventListener("pointermove", (e) => {
     if (p.x !== drag.last.x || p.y !== drag.last.y) {
       for (const key of pathBetween(drag.last, p)) {
         if (!doc[key]) { doc[key] = { kind: "wire" }; drag.changed = true; }
+        drag.steps++;
       }
       drag.last = p;
       changed(false);
@@ -848,6 +1029,16 @@ milliBtn.addEventListener("click", () => {
   if (!editorEl.hidden) { delete editorEl.dataset.edge; delete editorEl.dataset.kind; }
   changed(false);
 });
+const wiresBtn = $("#btn-wires") as HTMLButtonElement;
+const syncWires = () => { wiresBtn.classList.toggle("on", wireSettings.on); wiresBtn.setAttribute("aria-pressed", String(wireSettings.on)); };
+syncWires();
+wiresBtn.addEventListener("click", () => {
+  wireSettings.on = !wireSettings.on;
+  saveWireSettings();
+  syncWires();
+  if (!wireSettings.on && selected && doc[selected]?.kind === "wire") selected = null;
+  changed(false);
+});
 $("#btn-flow").addEventListener("click", (e) => {
   showFlow = !showFlow;
   const b = e.currentTarget as HTMLButtonElement;
@@ -865,6 +1056,9 @@ resultsEl.addEventListener("click", (e) => {
 (window as unknown as { sandbox: unknown }).sandbox = {
   select: (name: string) => select(Object.keys(doc).find((k) => doc[k].name === name) ?? null),
   setTool, loadExample, fitView,
+  selectEdge: (key: string) => select(key),
+  setWires: (patch: Partial<WireSettings>) => { wireSettings = { ...wireSettings, ...patch }; syncWires(); changed(false); },
+  get wires() { return wires; },
   get doc() { return doc; }, set doc(d: Doc) { doc = d; selected = null; changed(); fitView(); },
 };
 

@@ -245,6 +245,46 @@ details.steps li { overflow-wrap: anywhere; }
 .editor .actions .chip { flex: 1; }
 .chip.danger:hover { border-color: var(--bad); color: var(--bad); }
 
+/* ---------- real wires */
+.run-label text { font: 500 11px var(--font-mono); fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.run-label.pass text { fill: var(--wire); opacity: 0.85; }
+.run-label.warn text { fill: var(--warn); }
+.run-label.fail text { fill: var(--bad); }
+.hover-edge.run-sel { opacity: 0.32; stroke-width: 12; }
+.len-tag { font: 600 14px var(--font-mono); fill: var(--fg); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+
+.wires { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
+.wires-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wires-head h3 { margin: 0; font: 700 15px var(--font-display); }
+.wire-settings { display: grid; gap: 8px; }
+.wset { display: grid; grid-template-columns: 70px minmax(0, 1fr); align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.wbox { display: flex; align-items: center; min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.wbox:focus-within { border-color: var(--calc); }
+.wbox input, .wbox select { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; color: var(--fg); font: 500 13px var(--font-mono); padding: 7px 9px; outline: none; }
+.wbox select { font-family: var(--font-body); cursor: pointer; }
+.wbox select option { background: var(--panel-solid); color: var(--fg); }
+.wbox input::placeholder { color: var(--calc); opacity: 0.85; }
+.wbox input.bad { color: var(--bad); }
+.wbox em { font: normal 500 11.5px var(--font-body); color: var(--muted); padding-right: 9px; white-space: nowrap; }
+.wire-note { margin: 0; font-size: 12px; color: var(--muted); }
+.total .v.vd.pass, td.vd.pass { color: var(--good); }
+.total .v.vd.warn, td.vd.warn { color: var(--warn); }
+.total .v.vd.fail, td.vd.fail { color: var(--bad); }
+.checks li.pass::before { background: var(--good); }
+.checks li { font-size: 12.5px; }
+.checks .rule { font: 500 10.5px var(--font-mono); color: var(--muted); margin-left: 4px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+.dot.pass { background: var(--good); } .dot.warn { background: var(--warn); } .dot.fail { background: var(--bad); }
+.auto { font: 600 9.5px var(--font-body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-left: 5px; }
+.editor.wire { width: 300px; }
+.editor.wire .kind-dot { background: var(--wire); }
+.editor .run-name { flex: 1; font: 700 15px var(--font-body); }
+.wire-read { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; font-size: 11.5px; color: var(--muted); }
+.wire-read div { display: flex; flex-direction: column; min-width: 0; }
+.wire-read b { font: 600 12.5px var(--font-mono); color: var(--fg); overflow-wrap: anywhere; }
+.editor.wire .checks:empty { display: none; }
+.editor.wire .checks li { padding: 7px 9px; }
+
 @media (max-width: 860px) {
   /* Portrait phone: one slim top row, a full-width tool dock, and a results peek bar
      that expands into a sheet. Everything else goes to the board. */
@@ -299,6 +339,8 @@ details.steps li { overflow-wrap: anywhere; }
     bottom: calc(80px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px;
   }
   .editor header, .editor .actions { grid-column: 1 / -1; }
+  .editor.wire { display: flex; max-height: 60%; overflow-y: auto; }
+  .wbox input { font-size: 16px; }
   .editor .note { display: none; }
   .field input { font-size: 16px; padding: 8px; } /* 16px stops iOS zooming on focus */
 }
