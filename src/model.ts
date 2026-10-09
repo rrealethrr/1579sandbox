@@ -14,6 +14,16 @@ export interface Item {
   known?: Partial<Record<Q, string>>;
   /** Sources only: + terminal at the b end instead of the a end. */
   flip?: boolean;
+  /** Wires only, real-wire mode: overrides for the run this edge belongs to. */
+  wire?: WireSpec;
+}
+
+export interface WireSpec {
+  /** Length to use instead of the drawn length, in feet. */
+  lengthFt?: number;
+  /** Standard size name like "12 AWG", or "auto". */
+  size?: string;
+  metal?: "cu" | "al";
 }
 
 /** Edge key -> item. */

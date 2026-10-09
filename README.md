@@ -28,6 +28,25 @@ Values accept engineering units: `4.7k`, `12V`, `10mA`, `220Ω`, `1meg` (a bare 
 rejected as ambiguous, the same as the Python tools). Leave unknowns blank. Values you
 typed show in white; calculated ones in cyan.
 
+## Real wires
+
+Off by default: wires are perfect and nothing about them shows. Turn on **Real wires**
+in the top bar to treat every drawn wire as a real conductor:
+
+- **To scale.** Each grid square is 10 ft (change it under Scale). Painting a wire shows
+  its length as you drag, and every run of wire is labeled with its length and size.
+- **Defaults.** Copper with K = 12.6 Ω·cmil/ft (aluminum uses 21.2). Wire size is Auto:
+  the smallest standard size that passes every check below.
+- **Per run.** Click a run with the select tool to give it its own length (for runs not
+  drawn to scale), size or material.
+- **Solving.** Each run becomes R = K·L/CM in the circuit. Loads keep the resistance from
+  the perfect-wire solve, and the panel shows the voltage each load really gets.
+- **NEC checks.** Voltage drop at each load (3% recommended, 5% total, the informational
+  notes to 210.19(A) and 215.2(A)), ampacity (Table 310.16, 75 °C column), the
+  small-conductor limits of 240.4(D) and minimum size (310.3(A)). Runs that fail are
+  marked red on the board, warnings amber. Breaker sizing and continuous-load rules
+  aren't checked: the sandbox has no breakers yet.
+
 ## How it solves
 
 1. The drawing becomes a netlist: grid points joined by wires become nodes; every
@@ -53,7 +72,7 @@ typed show in white; calculated ones in cyan.
 ```
 npm install
 npm run dev          # live dev server
-npm test             # 55 tests: the Python hand-solved cases plus drawn circuits
+npm test             # 66 tests: the Python hand-solved cases plus drawn circuits
 npm run build        # dist/index.html (single file) and dist/artifact.html
 npm run screenshots  # needs Chromium; set CHROMIUM=/path/to/chrome if not found
 ```
@@ -64,6 +83,7 @@ Source layout:
 - `src/solver/knownValues.ts` – port of `known_values.py` (`test/knownValues.test.ts`)
 - `src/solver/circuit.ts` – drawing to circuit, shape detection, problem checks, solving
 - `src/solver/units.ts` – value parsing and formatting
+- `src/solver/conductor.ts`, `src/solver/nec.ts`, `src/solver/wires.ts` – real wires: K·L/CM, NEC tables and checks, runs and auto sizing (`test/wires.test.ts`)
 - `src/main.ts`, `src/style.css`, `index.html` – the board and UI
 - `src/examples.ts` – the example circuits (taken from the Python tests)
 
